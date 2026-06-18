@@ -1,0 +1,49 @@
+name: ThemePulse data
+
+on:
+  schedule:
+    - cron: "30 21 * * 1-5"   # 21:30 UTC weekdays, ~after US close
+  workflow_dispatch:           # manual run button
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install deps
+        run: pip install yfinance pandas
+
+      - name: Rebuild themes.json (real returns)
+        run: python scripts/build_themes.py
+
+      - name: Refresh embedded fallback in ThemePulse.html
+        run: python build_html.py
+
+      - name: Commit if changed
+        run: |
+          git config user.name  "themepulse-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add themes.json ThemePulse.html
+          git diff --cached --quiet || git commit -m "data: refresh themes.json $(date -u +%F)"
+          git push
+
+  # Optional: publish to GitHub Pages. Enable Pages → "GitHub Actions" in repo settings.
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { ref: main }
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: "." }
+      - uses: actions/deploy-pages@v4
